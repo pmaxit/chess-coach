@@ -16,3 +16,4 @@ assets/calibration_preview.png
 .idea/
 .vscode/
 *.swp
+dist/
