@@ -15,15 +15,13 @@
   let analyzing = false;
   let lastFen = "";
   let lastFlipped = false;
+  let ourColor = "w";
 
   function setStatus(msg) {
     statusEl.textContent = msg;
   }
 
-  function fmtEval(kind, val, turn) {
-    // Stockfish score is from side-to-move POV in UCI relative... 
-    // actually `score cp` in info is from white's perspective in some builds,
-    // but Stockfish UCI is side-to-move. We'll show as-is with sign for mover.
+  function fmtEval(kind, val) {
     if (kind === "mate") {
       return val > 0 ? `M${val}` : `-M${Math.abs(val)}`;
     }
@@ -35,11 +33,7 @@
       const from = uci.slice(0, 2);
       const to = uci.slice(2, 4);
       const promo = uci[4];
-      const move = board.move({
-        from,
-        to,
-        promotion: promo || "q",
-      });
+      const move = board.move({ from, to, promotion: promo || "q" });
       if (!move) return { san: uci, why: "Candidate move." };
       const bits = [];
       if (move.flags.includes("c") || move.flags.includes("e")) bits.push(`Captures on ${to}.`);
@@ -62,7 +56,13 @@
     }
   }
 
-  function renderCards(board, lines) {
+  /** Convert centipawn to win probability using a sigmoid. */
+  function cpToWinProb(cp) {
+    // logistic: 1 / (1 + exp(-cp/400))
+    return 100 / (1 + Math.exp(-cp / 400));
+  }
+
+  function renderCards(board, lines, isOurTurn) {
     cardsEl.innerHTML = "";
     const arrows = [];
     const baseCp = lines[0]
@@ -70,6 +70,20 @@
         ? (lines[0].val > 0 ? 10000 : -10000)
         : lines[0].val
       : 0;
+
+    // Only show predictions when it's our turn
+    if (!isOurTurn) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="card-head">
+          <span class="san">⏳ Opponent to move</span>
+        </div>
+        <div class="why">Predictions appear when it's your turn.</div>
+      `;
+      cardsEl.appendChild(card);
+      return { arrows, winProb: null };
+    }
 
     lines.slice(0, 3).forEach((line, i) => {
       const uci = line.pv[0];
@@ -79,25 +93,17 @@
 
       const cp = line.kind === "mate" ? (line.val > 0 ? 10000 : -10000) : line.val;
       const loss = Math.max(0, baseCp - cp);
-      const label =
-        rank === 1 ? "★ Best" : loss < 30 ? "Good" : loss < 80 ? "OK" : "Alt";
+      const label = rank === 1 ? "★ Best" : loss < 30 ? "Good" : loss < 80 ? "OK" : "Alt";
 
       const card = document.createElement("div");
       card.className = `card rank-${rank}`;
-      const pvSan = (() => {
-        const b = new Chess(board.fen());
-        const sans = [];
-        for (const u of line.pv.slice(0, 8)) {
-          const m = b.move({
-            from: u.slice(0, 2),
-            to: u.slice(2, 4),
-            promotion: u[4] || "q",
-          });
-          if (!m) break;
-          sans.push(m.san);
-        }
-        return sans.join(" ");
-      })();
+      const pvSans = [];
+      const b = new Chess(board.fen());
+      for (const u of line.pv.slice(0, 8)) {
+        const m = b.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || "q" });
+        if (!m) break;
+        pvSans.push(m.san);
+      }
 
       card.innerHTML = `
         <div class="card-head">
@@ -105,11 +111,13 @@
           <span class="meta">${label} · ${fmtEval(line.kind, line.val)}</span>
         </div>
         <div class="why">${why}</div>
-        <div class="pv">${pvSan}</div>
+        <div class="pv">${pvSans.join(" ")}</div>
       `;
       cardsEl.appendChild(card);
     });
-    return arrows;
+
+    const winProb = cpToWinProb(baseCp);
+    return { arrows, winProb };
   }
 
   async function getActiveTab() {
@@ -126,15 +134,8 @@
     try {
       return await chrome.tabs.sendMessage(tab.id, message);
     } catch {
-      // content script may not be injected yet
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"],
-      });
-      await chrome.scripting.insertCSS({
-        target: { tabId: tab.id },
-        files: ["content.css"],
-      }).catch(() => {});
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ["content.css"] }).catch(() => {});
       return await chrome.tabs.sendMessage(tab.id, message);
     }
   }
@@ -156,6 +157,7 @@
       }
       lastFen = pos.fen;
       lastFlipped = !!pos.flipped;
+      ourColor = pos.ourColor || "w";
 
       let board;
       try {
@@ -178,10 +180,30 @@
 
       const top = lines[0];
       evalEl.textContent = fmtEval(top.kind, top.val);
-      const arrows = renderCards(board, lines);
-      await askContent({ type: "DRAW_ARROWS", arrows, flipped: lastFlipped });
-      warningsEl.textContent =
-        pos.turn === "w" ? "White to move" : "Black to move";
+      const { arrows, winProb } = renderCards(board, lines, pos.isOurTurn);
+
+      if (pos.isOurTurn) {
+        // Draw static arrows
+        await askContent({ type: "DRAW_ARROWS", arrows, flipped: lastFlipped });
+
+        // If highly predictive of win (cp > 200 or mate), animate next 3 moves
+        const topCp = top.kind === "mate" ? (top.val > 0 ? 10000 : -10000) : top.val;
+        if (topCp > 200 && top.pv && top.pv.length >= 3) {
+          await askContent({
+            type: "ANIMATE_PV",
+            pvMoves: top.pv.slice(0, 3),
+            flipped: lastFlipped,
+            winProb: cpToWinProb(topCp),
+          });
+        }
+      } else {
+        // Opponent's turn — just clear arrows
+        await askContent({ type: "CLEAR_ARROWS" });
+      }
+
+      warningsEl.textContent = pos.isOurTurn
+        ? `Your turn (${ourColor === "w" ? "White" : "Black"})`
+        : `Opponent thinking…`;
       setStatus(`Updated · ${pos.pieceCount} pieces · ${new Date().toLocaleTimeString()}`);
     } catch (e) {
       setStatus(String(e.message || e));
@@ -213,13 +235,11 @@
     }
   });
 
-  // Warm the engine
   setStatus("Loading Stockfish…");
   engine
     .init()
     .then(() => setStatus("Ready — open a chess.com game"))
     .catch((e) => setStatus("Engine failed to load: " + e));
 
-  // First pass shortly after open
   setTimeout(() => analyzeNow(true), 600);
 })();
