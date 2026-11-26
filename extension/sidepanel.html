@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chess Coach</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Chess Coach</h1>
+      <p class="sub">chess.com side panel · training / unrated / bots only</p>
+    </div>
+    <div class="eval" id="eval">—</div>
+  </header>
+
+  <div class="status" id="status">Open a chess.com game, then click Analyze</div>
+
+  <section class="controls">
+    <button id="btnAnalyze" class="primary">Analyze</button>
+    <button id="btnAuto" class="toggle on" title="Auto-analyze on each move">Auto: ON</button>
+    <label class="depth">
+      Depth
+      <select id="depth">
+        <option value="12">Fast (12)</option>
+        <option value="15" selected>Normal (15)</option>
+        <option value="18">Deep (18)</option>
+        <option value="20">Very deep (20)</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="legend">
+    <span><i class="dot best"></i> best</span>
+    <span><i class="dot second"></i> 2nd</span>
+    <span><i class="dot third"></i> 3rd</span>
+  </section>
+
+  <section id="cards" class="cards"></section>
+
+  <section class="warnings" id="warnings"></section>
+
+  <footer>
+    <button id="btnClear">Clear arrows</button>
+    <button id="btnRefresh">Re-read board</button>
+  </footer>
+
+  <script src="vendor/chess.min.js"></script>
+  <script src="engine.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

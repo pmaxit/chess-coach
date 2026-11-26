@@ -1,0 +1,5 @@
+chess>=1.11
+mss>=10.0
+opencv-python>=4.9
+numpy
+pillow

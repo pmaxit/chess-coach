@@ -1,0 +1,40 @@
+#chess-coach-arrow-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 40;
+  overflow: visible;
+}
+
+#chess-coach-arrow-layer .cc-arrow-shaft {
+  fill: none;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+#chess-coach-arrow-layer .cc-arrow-head {
+  opacity: 0.9;
+}
+
+#chess-coach-badge {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 999999;
+  background: #161a22;
+  color: #e2e8f0;
+  font: 12px/1.3 system-ui, sans-serif;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+#chess-coach-badge.visible {
+  opacity: 1;
+}

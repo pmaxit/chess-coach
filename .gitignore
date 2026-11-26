@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Local / debug capture artifacts
+assets/debug_*.png
+assets/last_fen.txt
+assets/calibration.json
+assets/calibration_preview.png
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
